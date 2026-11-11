@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import {readAccountFrom,mutateAccountIn} from '../lib/account-store.ts';
+const sqlite=new DatabaseSync(':memory:');sqlite.exec('CREATE TABLE accounts(user_id TEXT PRIMARY KEY,document TEXT NOT NULL,revision INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL)');
+const db={prepare:(sql:string)=>({bind:(...values:any[])=>({first:async()=>sqlite.prepare(sql).get(...values)||null,run:async()=>({meta:{changes:sqlite.prepare(sql).run(...values).changes}})})})} as any;
+const empty=()=>({profile:{company:'default'},records:{},watches:[],briefings:[]}) as any;
+await mutateAccountIn(db,'user-a',a=>{a.profile.company='PRIVATE A';a.records['article:test']={note:'A note'};},empty);
+await mutateAccountIn(db,'user-b',a=>{a.profile.company='PRIVATE B';},empty);
+assert.equal((await readAccountFrom(db,'user-a',empty)).profile.company,'PRIVATE A');
+assert.equal((await readAccountFrom(db,'user-b',empty)).profile.company,'PRIVATE B');
+assert.deepEqual((await readAccountFrom(db,'user-b',empty)).records,{});
+assert.equal((await readAccountFrom(db,null,empty)).profile.company,'default');
+await Promise.all([mutateAccountIn(db,'user-a',a=>{a.records.x={note:'one'};},empty),mutateAccountIn(db,'user-a',a=>{a.records.y={note:'two'};},empty)]);
+const merged=await readAccountFrom(db,'user-a',empty);assert.equal(merged.records.x.note,'one');assert.equal(merged.records.y.note,'two');
+await assert.rejects(mutateAccountIn(db,'user-a',a=>{a.records.huge={note:'x'.repeat(260000)};},empty),/storage is full/);
+assert.equal((await readAccountFrom(db,'user-b',empty)).profile.company,'PRIVATE B');
+console.log('PASS: two-user storage isolation, anonymous default, concurrent saves with revision checks and size limits.');sqlite.close();

@@ -1,0 +1,20 @@
+"use client";
+import { useState } from "react";
+import { Check, SlidersHorizontal, ArrowRight } from "lucide-react";
+import { INDUSTRIES, industryLabel, normalizeIndustries, preferredIndustries } from "@/lib/industries";
+import { Modal, type Data } from "./workstation";
+export type IndustrySelection={sectors:string[];interestedSectors:string[]};
+export function IndustryPreferences({profile,coverage,onSave}:{profile:Data["profile"];coverage:Data["desk"]["industryCoverage"];onSave:(value:IndustrySelection)=>Promise<void>}){
+ const [open,setOpen]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState("");
+ const [own,setOwn]=useState<string[]>([]),[interests,setInterests]=useState<string[]>([]);
+ const selected=preferredIndustries(profile);
+ function edit(){setOwn(normalizeIndustries(profile.sectors));setInterests(normalizeIndustries(profile.interestedSectors));setError("");setOpen(true);}
+ function toggle(id:string,values:string[],set:(values:string[])=>void){set(values.includes(id)?values.filter(v=>v!==id):[...values,id]);}
+ return <><section className="industry-preference-bar" aria-label="My industry preferences"><span className="industry-preference-icon"><SlidersHorizontal size={20}/></span><div><h2>{profile.industrySetupComplete?"My industry view":"Choose industries that matter to you"}</h2><p>{profile.industrySetupComplete?(selected.length?selected.map(industryLabel).join(" · "):"Browsing all industries · Adjust your interests anytime"):`${INDUSTRIES.length} industries · Separate your own sector from your interests`}</p></div><button className="button" onClick={edit}>{profile.industrySetupComplete?"Edit industries":"Choose my industries"}<ArrowRight size={14}/></button></section>
+ {open&&<Modal title="Customize your industry view" close={()=>{if(!saving)setOpen(false);}}><form className="industry-preferences-form" onSubmit={async e=>{e.preventDefault();setSaving(true);setError("");try{await onSave({sectors:own,interestedSectors:interests});setOpen(false);}catch(e){setError(e instanceof Error?e.message:"Could not save. Please try again.");}finally{setSaving(false);}}}>
+ <div className="industry-preferences-body"><p className="industry-form-intro">Choose the industries you work in and the areas you want to follow. You can change these anytime. Leave all unselected to browse everything.</p>
+ <div className="industry-pickers">{[{key:"own",title:"My industries",description:"Used for investor matching and homepage recommendations.",values:own,set:setOwn},{key:"interests",title:"My interests",description:"Used for news and briefing recommendations, without changing investor matches.",values:interests,set:setInterests}].map(group=><fieldset key={group.key}><legend>{group.title}<span>{group.values.length}  selected</span></legend><p>{group.description}</p><div className="industry-choice-grid">{INDUSTRIES.map(i=><button key={i.id} type="button" aria-pressed={group.values.includes(i.id)} disabled={saving} onClick={()=>toggle(i.id,group.values,group.set)}>{group.values.includes(i.id)&&<Check size={12} aria-hidden="true"/>}{i.label}</button>)}</div></fieldset>)}</div>
+ <div className="industry-coverage-note"><strong>Current coverage</strong><p>{[...new Set([...own,...interests])].length?"Matches in the collected sources over the past 7 days. A story may belong to more than one industry.":"With no industries selected, stories are ranked by keywords and recency."}</p><div>{[...new Set([...own,...interests])].map(id=><span key={id}>{industryLabel(id)} <b>{coverage.find(i=>i.id===id)?.count||0}</b></span>)}</div><small>Industries with no coverage show an empty state. Selecting an industry does not mean the database covers its entire market.</small></div>
+ {error&&<p className="industry-form-error" role="alert">{error}</p>}</div><footer><button type="button" className="text-button" disabled={saving} onClick={()=>{setOwn([]);setInterests([]);}}>Clear and browse all industries</button><button className="button primary" disabled={saving}>{saving?"Saving…":"Save & update recommendations"}</button></footer>
+ </form></Modal>}</>;
+}
